@@ -5,6 +5,7 @@ from collections import defaultdict
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 
 # Page configuration
 st.set_page_config(
@@ -29,8 +30,6 @@ def load_data():
                     'nominations': nominations,
                     'nominators': data.get('nominators', []),
                     'write_in_candidates': set(data.get('write_in_candidates', [])),
-                    'winner_selected': data.get('winner_selected', False),
-                    'winner': data.get('winner', None),
                     'nomination_reasons': data.get('nomination_reasons', {})
                 }
         except:
@@ -41,8 +40,6 @@ def load_data():
         'nominations': defaultdict(int),
         'nominators': [],
         'write_in_candidates': set(),
-        'winner_selected': False,
-        'winner': None,
         'nomination_reasons': {}
     }
 
@@ -53,14 +50,23 @@ def save_data():
             'nominations': dict(st.session_state.nominations),
             'nominators': st.session_state.nominators,
             'write_in_candidates': list(st.session_state.write_in_candidates),
-            'winner_selected': st.session_state.winner_selected,
-            'winner': st.session_state.winner,
             'nomination_reasons': getattr(st.session_state, 'nomination_reasons', {})
         }
         with open(DATA_FILE, 'w') as f:
             json.dump(data, f, indent=2)
     except Exception as e:
         st.error(f"Error saving data: {e}")
+
+def get_current_leader():
+    """Get the current leader(s) in nominations"""
+    if not st.session_state.nominations:
+        return None, 0
+    
+    sorted_nominations = sorted(st.session_state.nominations.items(), 
+                              key=lambda x: x[1], reverse=True)
+    top_votes = sorted_nominations[0][1]
+    leaders = [name for name, votes in sorted_nominations if votes == top_votes]
+    return leaders, top_votes
 
 # Initialize session state with persistent data
 if 'data_loaded' not in st.session_state:
@@ -69,8 +75,6 @@ if 'data_loaded' not in st.session_state:
     st.session_state.nominations = saved_data['nominations']
     st.session_state.nominators = saved_data['nominators']
     st.session_state.write_in_candidates = saved_data['write_in_candidates']
-    st.session_state.winner_selected = saved_data['winner_selected']
-    st.session_state.winner = saved_data['winner']
     st.session_state.nomination_reasons = saved_data['nomination_reasons']
     st.session_state.data_loaded = True
 else:
@@ -79,8 +83,6 @@ else:
     st.session_state.nominations = saved_data['nominations']
     st.session_state.nominators = saved_data['nominators']
     st.session_state.write_in_candidates = saved_data['write_in_candidates']
-    st.session_state.winner_selected = saved_data['winner_selected']
-    st.session_state.winner = saved_data['winner']
     st.session_state.nomination_reasons = saved_data['nomination_reasons']
 
 # Eligible nominees and profiles
@@ -105,11 +107,17 @@ def main():
     # Header
     st.title("🎵🏕️ PHILADELPHIA FOLK FESTIVAL EARLY INFILTRATION NOMINATION SYSTEM 🏕️🎵")
 
+    # Check voting deadline
+    today = datetime.now()
+    deadline = datetime(2025, 8, 12, 23, 59, 59)  # End of day August 12th 2025
+    voting_open = today < deadline
+    days_until_deadline = (deadline.date() - today.date()).days
+
     st.markdown("---")
 
     # Mission briefing
     with st.expander("🎪 THE MISSION BRIEFING", expanded=True):
-        st.markdown("""
+        st.markdown(f"""
         **Welcome to the annual tradition nobody wants but somebody must do!**
 
         Every year, two brave souls must sneak into the festival early (normally it comes down to - who's going with Greg!?)
@@ -120,6 +128,10 @@ def main():
         🏕️ **The Reward:** Being a hero... and internal bragging rights of course  
 
         **Let the nominations begin! May the odds be ever in someone else's favor.**
+        
+        ⏰ **Voting Deadline:** Tuesday, August 12th, 2025 at 11:59 PM
+        {"🗳️ **Status:** VOTING OPEN" if voting_open else "🔒 **Status:** VOTING CLOSED"}
+        {f"({days_until_deadline} days remaining)" if voting_open and days_until_deadline > 0 else ""}
         """)
 
     # Sidebar for nominations
@@ -127,78 +139,82 @@ def main():
         st.header("🗳️ CAST YOUR NOMINATION")
         st.markdown(random.choice(folk_quotes))
 
-        # Nominator name
-        nominator = st.text_input("👤 Your name, brave nominator:", 
-                                 placeholder="Enter your name")
+        if voting_open:
+            # Nominator name
+            nominator = st.text_input("👤 Your name, brave nominator:", 
+                                     placeholder="Enter your name")
 
-        if nominator:
-            # Build nominee options
-            all_nominees = eligible_nominees.copy()
-            all_nominees.extend(list(st.session_state.write_in_candidates))
-            all_nominees.append(nominator)  # Self-nomination option
+            if nominator:
+                # Build nominee options
+                all_nominees = eligible_nominees.copy()
+                all_nominees.extend(list(st.session_state.write_in_candidates))
+                all_nominees.append(nominator)  # Self-nomination option
 
-            # Nominee selection
-            st.markdown("**Choose your nominee:**")
-            nominee_choice = st.selectbox(
-                "Select a nominee:",
-                ["-- Select someone --"] + all_nominees + ["Write in new candidate"],
-                key="nominee_select"
-            )
+                # Nominee selection
+                st.markdown("**Choose your nominee:**")
+                nominee_choice = st.selectbox(
+                    "Select a nominee:",
+                    ["-- Select someone --"] + all_nominees + ["Write in new candidate"],
+                    key="nominee_select"
+                )
 
-            # Write-in option
-            write_in_name = None
-            if nominee_choice == "Write in new candidate":
-                write_in_name = st.text_input("✏️ Enter write-in candidate name:")
-                if write_in_name:
-                    nominee_choice = write_in_name
-
-            # Reasoning
-            reason = st.text_area("💭 Why this nominee? (Optional)", 
-                                placeholder="They seem like the obvious choice!")
-
-            # Submit nomination
-            if st.button("🎯 CAST NOMINATION", type="primary") and nominee_choice != "-- Select someone --":
-                if nominator not in st.session_state.nominators:
-                    # New nomination
-                    st.session_state.nominators.append(nominator)
-                    st.session_state.nominations[nominee_choice] += 1
-
-                    # Store the reason (without the nominator's name)
-                    if reason and reason.strip():
-                        if 'nomination_reasons' not in st.session_state:
-                            st.session_state.nomination_reasons = {}
-                        if nominee_choice not in st.session_state.nomination_reasons:
-                            st.session_state.nomination_reasons[nominee_choice] = []
-                        st.session_state.nomination_reasons[nominee_choice].append(reason.strip())
-
+                # Write-in option
+                write_in_name = None
+                if nominee_choice == "Write in new candidate":
+                    write_in_name = st.text_input("✏️ Enter write-in candidate name:")
                     if write_in_name:
-                        st.session_state.write_in_candidates.add(write_in_name)
+                        nominee_choice = write_in_name
 
-                    # Save to persistent storage
-                    save_data()
+                # Reasoning
+                reason = st.text_area("💭 Why this nominee? (Optional)", 
+                                    placeholder="They seem like the obvious choice!")
 
-                    # Show reaction
-                    if nominee_choice == nominator:
-                        st.success(f"🦸 {nominator} bravely nominates themselves!")
-                        st.balloons()
+                # Submit nomination
+                if st.button("🎯 CAST NOMINATION", type="primary") and nominee_choice != "-- Select someone --":
+                    if nominator not in st.session_state.nominators:
+                        # New nomination
+                        st.session_state.nominators.append(nominator)
+                        st.session_state.nominations[nominee_choice] += 1
+
+                        # Store the reason (without the nominator's name)
+                        if reason and reason.strip():
+                            if 'nomination_reasons' not in st.session_state:
+                                st.session_state.nomination_reasons = {}
+                            if nominee_choice not in st.session_state.nomination_reasons:
+                                st.session_state.nomination_reasons[nominee_choice] = []
+                            st.session_state.nomination_reasons[nominee_choice].append(reason.strip())
+
+                        if write_in_name:
+                            st.session_state.write_in_candidates.add(write_in_name)
+
+                        # Save to persistent storage
+                        save_data()
+
+                        # Show reaction
+                        if nominee_choice == nominator:
+                            st.success(f"🦸 {nominator} bravely nominates themselves!")
+                            st.balloons()
+                        else:
+                            reactions = [
+                                f"😱 {nominee_choice}: 'Wait, what?!'",
+                                f"😏 {nominee_choice}: 'I should have seen this coming...'",
+                                f"🤷 {nominee_choice}: 'Well, someone has to do it!'",
+                                f"😤 {nominee_choice}: 'I'm getting you back for this!'",
+                                f"😌 {nominee_choice}: 'Finally, recognition for my sneaking skills!'"
+                            ]
+                            st.success(f"🎯 {nominator} nominates {nominee_choice}!")
+                            st.info(random.choice(reactions))
+
+                        if reason:
+                            st.write(f"💭 *'{reason}'*")
+
+                        # Refresh the page to update results
+                        st.rerun()
                     else:
-                        reactions = [
-                            f"😱 {nominee_choice}: 'Wait, what?!'",
-                            f"😏 {nominee_choice}: 'I should have seen this coming...'",
-                            f"🤷 {nominee_choice}: 'Well, someone has to do it!'",
-                            f"😤 {nominee_choice}: 'I'm getting you back for this!'",
-                            f"😌 {nominee_choice}: 'Finally, recognition for my sneaking skills!'"
-                        ]
-                        st.success(f"🎯 {nominator} nominates {nominee_choice}!")
-                        st.info(random.choice(reactions))
-
-                    if reason:
-                        st.write(f"💭 *'{reason}'*")
-
-                    # Refresh the page to update results
-                    st.rerun()
-                else:
-                    st.error("🎵 You've already cast your nomination! One vote per person.")
+                        st.error("🎵 You've already cast your nomination! One vote per person.")
+        else:
+            st.warning("🔒 Voting has closed!")
+            st.info("The nomination period ended on Tuesday, August 12th, 2025")
 
     # Main content area
     col1, col2 = st.columns([1, 1])
@@ -263,44 +279,33 @@ def main():
                 st.metric("🎯 Candidates", len(st.session_state.nominations))
                 st.metric("📝 Write-ins", len(st.session_state.write_in_candidates))
         else:
-            st.info("🤔 No nominations yet! Someone needs to step up and cast the first vote...")
+            if voting_open:
+                st.info("🤔 No nominations yet! Someone needs to step up and cast the first vote...")
+            else:
+                st.info("🤔 No nominations were cast before the deadline.")
 
-    # Winner selection section
+    # Current Leader/Winner Section
     st.markdown("---")
 
-    if st.session_state.nominations and not st.session_state.winner_selected:
-        st.header("🎭 READY TO SELECT THE CHOSEN ONE?")
-
-        if st.button("🏆 SELECT THE WINNER!", type="secondary", use_container_width=True):
-            # Winner selection logic
-            sorted_results = sorted(st.session_state.nominations.items(), 
-                                  key=lambda x: x[1], reverse=True)
-            top_votes = sorted_results[0][1]
-            winners = [name for name, votes in sorted_results if votes == top_votes]
-
-            st.markdown("### 🎪 THE MOMENT OF TRUTH HAS ARRIVED! 🎪")
-
-            with st.empty():
-                # Dramatic countdown
-                for i in range(3, 0, -1):
-                    st.markdown(f"## ⏰ {i}...")
-                    time.sleep(1)
-
-                st.markdown("## 🎲 *DRAMATIC DICE ROLL SOUND EFFECTS*")
-                time.sleep(1)
-
-            # Select winner
-            if len(winners) == 1:
-                chosen_one = winners[0]
-                st.success("🏆 WE HAVE A CLEAR WINNER!")
-                st.success(f"🎉 **{chosen_one}** has been selected by popular vote!")
+    if st.session_state.nominations:
+        leaders, top_votes = get_current_leader()
+        
+        if not voting_open:
+            # Voting is closed - show final winner
+            st.header("🎪 OFFICIAL FINAL RESULTS 🎪")
+            
+            if len(leaders) == 1:
+                chosen_one = leaders[0]
+                st.success("🏆 WE HAVE OUR FINAL WINNER!")
+                st.success(f"🎉 **{chosen_one}** has been selected with {top_votes} votes!")
             else:
-                chosen_one = random.choice(winners)
-                st.info(f"🤝 WE HAD A TIE! {len(winners)} brave souls with {top_votes} votes each!")
-                st.success("🎯 THE DICE HAVE SPOKEN!")
-                st.success(f"🏆 **{chosen_one}** has been randomly selected from the tied winners!")
+                # Handle tie - pick random winner for final result
+                chosen_one = random.choice(leaders)
+                st.info(f"🤝 WE HAD A FINAL TIE! {len(leaders)} brave souls with {top_votes} votes each!")
+                st.success("🎯 RANDOM SELECTION ACTIVATED!")
+                st.success(f"🏆 **{chosen_one}** has been randomly selected as the final winner!")
 
-            # Victory reactions
+            # Victory speech
             victory_speeches = [
                 f"🎤 {chosen_one}: 'I'd like to thank my agent, my coffee maker, and whoever nominated me...'",
                 f"🎤 {chosen_one}: 'This is either the greatest honor or the worst luck of my life!'",
@@ -309,24 +314,31 @@ def main():
                 f"🎤 {chosen_one}: 'Well, someone had to do it. Might as well be me!'"
             ]
             st.write(random.choice(victory_speeches))
-
-            # Store winner
-            st.session_state.winner = chosen_one
-            st.session_state.winner_selected = True
             
-            # Save to persistent storage
-            save_data()
+        else:
+            # Voting is still open - show current leader
+            st.header("🎭 CURRENT FRONT-RUNNER")
+            
+            if len(leaders) == 1:
+                st.info(f"🥇 **{leaders[0]}** is currently leading with {top_votes} votes!")
+                st.write("But voting is still open - anything could happen! 🎪")
+            else:
+                st.info(f"🤝 **TIE!** {len(leaders)} nominees are tied with {top_votes} votes each:")
+                for leader in leaders:
+                    st.write(f"   🏅 {leader}")
+                st.write("The suspense continues... 🎭")
 
-            st.balloons()
-
-    # Winner announcement
-    if st.session_state.winner_selected:
+    # Final announcement section (only after voting closes)
+    if not voting_open and st.session_state.nominations:
+        leaders, top_votes = get_current_leader()
+        final_winner = leaders[0] if len(leaders) == 1 else random.choice(leaders)
+        
         st.markdown("---")
         st.header("🎪 OFFICIAL ANNOUNCEMENT 🎪")
 
         announcement_col = st.columns([1, 2, 1])[1]
         with announcement_col:
-            st.success(f"🏕️ **{st.session_state.winner} and Greg** will be the official Early Bird Infiltration Team!")
+            st.success(f"🏕️ **{final_winner} and Greg** will be the official Early Bird Infiltration Team!")
             st.info("⏰ **Mission time:** Approximately 4:30 AM (or whenever Greg's alarm goes off)")
             st.info("🎯 **Mission objective:** Secure the sacred campsite spot")
             st.info("🤝 **Mission support:** Everyone else sleeps in and arrives fashionably late")
@@ -353,30 +365,27 @@ def main():
             🏕️ **See you all at the sacred campsite... whenever you decide to roll out of bed!** 🏕️
             """)
 
-        # Reset button (admin)
-        if st.session_state.nominations:
-            with st.expander("⚙️ Admin Controls"):
-                # Add password protection for reset
-                reset_code = st.text_input("🔐 Enter admin code to reset:", 
-                                         type="password", 
-                                         placeholder="Enter 4-digit code")
-                
-                if st.button("🔄 Reset All Nominations", type="secondary"):
-                    if reset_code == "1320":
-                        st.session_state.nominations = defaultdict(int)
-                        st.session_state.nominators = []
-                        st.session_state.write_in_candidates = set()
-                        st.session_state.winner_selected = False
-                        st.session_state.winner = None
-                        st.session_state.nomination_reasons = {}
-                        # Save the reset state
-                        save_data()
-                        st.success("🎪 All nominations have been reset!")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid admin code! Nice try though... 🎭")
-
+    # Reset button (admin)
+    if st.session_state.nominations:
+        with st.expander("⚙️ Admin Controls"):
+            # Add password protection for reset
+            reset_code = st.text_input("🔐 Enter admin code to reset:", 
+                                     type="password", 
+                                     placeholder="Enter 4-digit code")
+            
+            if st.button("🔄 Reset All Nominations", type="secondary"):
+                if reset_code == "1320":
+                    st.session_state.nominations = defaultdict(int)
+                    st.session_state.nominators = []
+                    st.session_state.write_in_candidates = set()
+                    st.session_state.nomination_reasons = {}
+                    # Save the reset state
+                    save_data()
+                    st.success("🎪 All nominations have been reset!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid admin code! Nice try though... 🎭")
 
 if __name__ == "__main__":
     main()
