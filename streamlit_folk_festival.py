@@ -409,3 +409,106 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # --- Google Sheets Persistence Layer for Streamlit Community Cloud ---
+
+    # 1. Setup Instructions:
+    #    a. Create a Google Sheet with columns: "nominations", "nominators", "nomination_reasons", "write_in_candidates"
+    #    b. Share the sheet with a Google Service Account (see below)
+    #    c. Add your service account credentials JSON to Streamlit Secrets as:
+    #       [gcp_service_account]
+    #       type = ...
+    #       project_id = ...
+    #       private_key_id = ...
+    #       private_key = ...
+    #       client_email = ...
+    #       client_id = ...
+    #       ...
+    #    d. Add your sheet URL to Streamlit Secrets as:
+    #       [gsheets]
+    #       sheet_url = "https://docs.google.com/spreadsheets/d/...."
+
+    import streamlit as st
+    import json
+    from collections import defaultdict
+
+    # Use Streamlit's built-in Google Sheets connection (no extra pip install needed on Streamlit Cloud)
+    from streamlit.connections import ExperimentalBaseConnection
+
+    class GSheetsConnection(ExperimentalBaseConnection):
+        def _connect(self, **kwargs):
+            import gspread
+            from google.oauth2.service_account import Credentials
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            creds_dict["private_key"] = creds_dict["private_key"].replace('\\n', '\n')
+            creds = Credentials.from_service_account_info(creds_dict, scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ])
+            client = gspread.authorize(creds)
+            return client
+
+        def cursor(self):
+            return self._instance
+
+    # Helper to get the worksheet
+    def get_worksheet():
+        sheet_url = st.secrets["gsheets"]["sheet_url"]
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        client = conn.cursor()
+        sheet = client.open_by_url(sheet_url)
+        worksheet = sheet.sheet1  # Use first sheet
+        return worksheet
+
+    def load_data():
+        """
+        Loads nominations, nominators, nomination_reasons, and write_in_candidates from Google Sheets.
+        """
+        worksheet = get_worksheet()
+        records = worksheet.get_all_records()
+        if not records:
+            # No data yet, initialize
+            st.session_state.nominations = defaultdict(int)
+            st.session_state.nominators = []
+            st.session_state.nomination_reasons = {}
+            st.session_state.write_in_candidates = set()
+            return
+
+        # Use the first (and only) row as the data store
+        row = records[0]
+        # Each field is stored as a JSON string
+        st.session_state.nominations = defaultdict(
+            int, json.loads(row.get("nominations", "{}"))
+        )
+        st.session_state.nominators = json.loads(row.get("nominators", "[]"))
+        st.session_state.nomination_reasons = json.loads(row.get("nomination_reasons", "{}"))
+        st.session_state.write_in_candidates = set(json.loads(row.get("write_in_candidates", "[]")))
+
+    def save_data():
+        """
+        Saves nominations, nominators, nomination_reasons, and write_in_candidates to Google Sheets.
+        """
+        worksheet = get_worksheet()
+        # Prepare data as JSON strings
+        data = {
+            "nominations": json.dumps(dict(st.session_state.nominations)),
+            "nominators": json.dumps(list(st.session_state.nominators)),
+            "nomination_reasons": json.dumps(dict(st.session_state.nomination_reasons)),
+            "write_in_candidates": json.dumps(list(st.session_state.write_in_candidates)),
+        }
+        records = worksheet.get_all_records()
+        if not records:
+            # Insert new row
+            worksheet.append_row([data["nominations"], data["nominators"], data["nomination_reasons"], data["write_in_candidates"]])
+            # Set header if not present
+            if worksheet.row_count < 2:
+                worksheet.insert_row(["nominations", "nominators", "nomination_reasons", "write_in_candidates"], 1)
+        else:
+            # Update first row (row 2, since row 1 is header)
+            worksheet.update("A2", [[data["nominations"], data["nominators"], data["nomination_reasons"], data["write_in_candidates"]]])
+
+    # --- Why this works ---
+    # - Google Sheets is a free, persistent, cloud-hosted database for small data.
+    # - All users/devices see the same data instantly (on reload).
+    # - Data survives Streamlit container restarts and is shared across all browsers.
+    # - No local file storage is used; all data is in the cloud.
+    # - No complex DB setup; just a Google Sheet and a service account.
