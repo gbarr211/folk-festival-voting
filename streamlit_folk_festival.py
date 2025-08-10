@@ -3,6 +3,8 @@ import random
 import time
 from collections import defaultdict
 import json
+import os
+from pathlib import Path
 
 # Page configuration
 st.set_page_config(
@@ -12,17 +14,61 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state
-if 'nominations' not in st.session_state:
-    st.session_state.nominations = defaultdict(int)
-if 'nominators' not in st.session_state:
-    st.session_state.nominators = []
-if 'write_in_candidates' not in st.session_state:
-    st.session_state.write_in_candidates = set()
-if 'winner_selected' not in st.session_state:
-    st.session_state.winner_selected = False
-if 'winner' not in st.session_state:
-    st.session_state.winner = None
+# Persistent storage functions
+DATA_FILE = "folk_festival_data.json"
+
+def load_data():
+    """Load data from persistent storage"""
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r') as f:
+                data = json.load(f)
+                # Convert nominations back to defaultdict
+                nominations = defaultdict(int, data.get('nominations', {}))
+                return {
+                    'nominations': nominations,
+                    'nominators': data.get('nominators', []),
+                    'write_in_candidates': set(data.get('write_in_candidates', [])),
+                    'winner_selected': data.get('winner_selected', False),
+                    'winner': data.get('winner', None)
+                }
+        except:
+            pass
+    
+    # Return default data if file doesn't exist or can't be read
+    return {
+        'nominations': defaultdict(int),
+        'nominators': [],
+        'write_in_candidates': set(),
+        'winner_selected': False,
+        'winner': None
+    }
+
+def save_data():
+    """Save current data to persistent storage"""
+    try:
+        data = {
+            'nominations': dict(st.session_state.nominations),
+            'nominators': st.session_state.nominators,
+            'write_in_candidates': list(st.session_state.write_in_candidates),
+            'winner_selected': st.session_state.winner_selected,
+            'winner': st.session_state.winner
+        }
+        with open(DATA_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        st.error(f"Error saving data: {e}")
+
+# Initialize session state with persistent data
+if 'data_loaded' not in st.session_state:
+    # Load data from persistent storage
+    saved_data = load_data()
+    st.session_state.nominations = saved_data['nominations']
+    st.session_state.nominators = saved_data['nominators']
+    st.session_state.write_in_candidates = saved_data['write_in_candidates']
+    st.session_state.winner_selected = saved_data['winner_selected']
+    st.session_state.winner = saved_data['winner']
+    st.session_state.data_loaded = True
 
 # Eligible nominees and profiles
 eligible_nominees = ["Bowe", "Drew", "Derek", "Emily", "Josh", "TallPaul", "Osc"]
@@ -40,7 +86,6 @@ folk_quotes = [
     "🎭 'She neva came!...' 🎭",
     "🪕 'I DID IT!' 🪕",
     "🎭 'I changed my shirt!' 🎭",
-
 ]
 
 def main():
@@ -107,6 +152,9 @@ def main():
 
                     if write_in_name:
                         st.session_state.write_in_candidates.add(write_in_name)
+
+                    # Save to persistent storage
+                    save_data()
 
                     # Show reaction
                     if nominee_choice == nominator:
@@ -239,6 +287,9 @@ def main():
             # Store winner
             st.session_state.winner = chosen_one
             st.session_state.winner_selected = True
+            
+            # Save to persistent storage
+            save_data()
 
             st.balloons()
 
@@ -285,6 +336,8 @@ def main():
                 st.session_state.write_in_candidates = set()
                 st.session_state.winner_selected = False
                 st.session_state.winner = None
+                # Save the reset state
+                save_data()
                 st.rerun()
 
 if __name__ == "__main__":
