@@ -59,7 +59,7 @@ def main():
 
         🎪 **The Mission:** Arrive before dawn, act casual, claim the spot  
         🎸 **The Risk:** Getting caught by security and having to explain why  
-        🏕️ **The Reward:** Being a hero... and getting up at 4 AM  
+        🏕️ **The Reward:** Being a hero... and internal bragging rights of course  
 
         **Let the nominations begin! May the odds be ever in someone else's favor.**
         """)
