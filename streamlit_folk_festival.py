@@ -27,13 +27,13 @@ if 'winner' not in st.session_state:
 # Eligible nominees and profiles
 eligible_nominees = ["Bowe", "Drew", "Derek", "Emily", "Josh", "TallPaul", "Osc"]
 nominee_profiles = {
-    "Bowe": "Known for mysterious disappearing acts - perfect for sneaking!",
-    "Drew": "Has experience with questionable decision-making",
+    "Bowe": "Prefers the digital backdoor but this motherfucker loves a good challenge",
+    "Drew": "This multifaceted wheelman has proven his worth on this front before!",
     "Derek": "Surprisingly stealthy despite appearances",
     "Emily": "Can charm security guards with folk song trivia",
     "Josh": "Early bird by nature, coffee addiction helps with dawn missions",
-    "TallPaul": "Height advantage for spotting security from afar",
-    "Osc": "Has that innocent look that throws off suspicion"
+    "TallPaul": "Unspeakable shameless tactics",
+    "Osc": "In all honesty this man can probably just walk right past the guards in that smooth Osc fashion we all love and know"
 }
 
 folk_quotes = [
@@ -143,8 +143,8 @@ def main():
             st.write(f"   *{nominee_profiles[nominee]}*")
 
         st.write("🖊️ *Write-in candidates welcome! (In case we forgot someone important)*")
-        st.write("🤔 *Remember: Amp is busy with Wolfie and Micky*")
-        st.write("⏰ *Dome won't arrive in time (fashionably late as usual)*")
+        st.write("🤔 *Remember: Amp is busy with mothering Wolfie*")
+        st.write("⏰ *Dome, Micky and baby Wanda won't arrive in time*")
 
     # Live results
     with col2:
