@@ -1,4 +1,3 @@
-
 import streamlit as st
 import random
 import time
@@ -126,7 +125,7 @@ def main():
                         st.info(random.choice(reactions))
 
                     if reason:
-                        st.write(f"💭 *"{reason}"*")
+                        st.write(f"💭 *'{reason}'*")
 
                     # Refresh the page to update results
                     st.rerun()
@@ -220,12 +219,12 @@ def main():
             # Select winner
             if len(winners) == 1:
                 chosen_one = winners[0]
-                st.success(f"🏆 WE HAVE A CLEAR WINNER!")
+                st.success("🏆 WE HAVE A CLEAR WINNER!")
                 st.success(f"🎉 **{chosen_one}** has been selected by popular vote!")
             else:
                 chosen_one = random.choice(winners)
                 st.info(f"🤝 WE HAD A TIE! {len(winners)} brave souls with {top_votes} votes each!")
-                st.success(f"🎯 THE DICE HAVE SPOKEN!")
+                st.success("🎯 THE DICE HAVE SPOKEN!")
                 st.success(f"🏆 **{chosen_one}** has been randomly selected from the tied winners!")
 
             # Victory reactions
