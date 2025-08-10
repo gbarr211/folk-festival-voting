@@ -4,7 +4,6 @@ import time
 from collections import defaultdict
 import json
 import os
-from pathlib import Path
 from datetime import datetime
 
 # Page configuration
@@ -24,7 +23,6 @@ def load_data():
         try:
             with open(DATA_FILE, 'r') as f:
                 data = json.load(f)
-                # Convert nominations back to defaultdict
                 nominations = defaultdict(int, data.get('nominations', {}))
                 return {
                     'nominations': nominations,
@@ -35,7 +33,6 @@ def load_data():
         except:
             pass
     
-    # Return default data if file doesn't exist or can't be read
     return {
         'nominations': defaultdict(int),
         'nominators': [],
@@ -70,7 +67,6 @@ def get_current_leader():
 
 # Initialize session state with persistent data
 if 'data_loaded' not in st.session_state:
-    # Load data from persistent storage
     saved_data = load_data()
     st.session_state.nominations = saved_data['nominations']
     st.session_state.nominators = saved_data['nominators']
@@ -284,108 +280,101 @@ def main():
             else:
                 st.info("🤔 No nominations were cast before the deadline.")
 
-    # Current Leader/Winner Section
-    st.markdown("---")
-
+    # Live Winner Announcement Section (shows after first vote)
     if st.session_state.nominations:
+        st.markdown("---")
         leaders, top_votes = get_current_leader()
+        
+        # Always show the dramatic announcement (updates live until deadline)
+        st.header("🎭 THE MOMENT OF TRUTH... SO FAR! 🎭")
+        st.markdown("🎪" * 30)
         
         if not voting_open:
-            # Voting is closed - show final winner
-            st.header("🎪 OFFICIAL FINAL RESULTS 🎪")
-            
+            # Voting is closed - final results
             if len(leaders) == 1:
                 chosen_one = leaders[0]
-                st.success("🏆 WE HAVE OUR FINAL WINNER!")
-                st.success(f"🎉 **{chosen_one}** has been selected with {top_votes} votes!")
+                st.success("🏆 FINAL WINNER!")
+                st.success(f"🎉 **{chosen_one}** has been selected by popular vote with {top_votes} votes!")
             else:
-                # Handle tie - pick random winner for final result
+                # Handle final tie with dramatic selection
                 chosen_one = random.choice(leaders)
-                st.info(f"🤝 WE HAD A FINAL TIE! {len(leaders)} brave souls with {top_votes} votes each!")
-                st.success("🎯 RANDOM SELECTION ACTIVATED!")
+                st.info(f"🤝 FINAL TIE! {len(leaders)} brave souls with {top_votes} votes each!")
+                st.success("🎯 THE DICE HAVE SPOKEN!")
                 st.success(f"🏆 **{chosen_one}** has been randomly selected as the final winner!")
-
-            # Victory speech
-            victory_speeches = [
-                f"🎤 {chosen_one}: 'I'd like to thank my agent, my coffee maker, and whoever nominated me...'",
-                f"🎤 {chosen_one}: 'This is either the greatest honor or the worst luck of my life!'",
-                f"🎤 {chosen_one}: 'I promise to sneak responsibly and secure that campsite!'",
-                f"🎤 {chosen_one}: 'Greg, I hope you have a good alarm clock!'",
-                f"🎤 {chosen_one}: 'Well, someone had to do it. Might as well be me!'"
-            ]
-            st.write(random.choice(victory_speeches))
-            
         else:
-            # Voting is still open - show current leader
-            st.header("🎭 CURRENT FRONT-RUNNER")
-            
+            # Voting still open - show current leader
             if len(leaders) == 1:
-                st.info(f"🥇 **{leaders[0]}** is currently leading with {top_votes} votes!")
-                st.write("But voting is still open - anything could happen! 🎪")
+                chosen_one = leaders[0]
+                st.success("🏆 CURRENT WINNER!")
+                st.success(f"🎉 **{chosen_one}** is leading with {top_votes} votes!")
+                st.write("⚠️ *But voting is still open - this could change!* ⚠️")
             else:
-                st.info(f"🤝 **TIE!** {len(leaders)} nominees are tied with {top_votes} votes each:")
-                for leader in leaders:
-                    st.write(f"   🏅 {leader}")
-                st.write("The suspense continues... 🎭")
+                # Current tie
+                st.info(f"🤝 CURRENT TIE! {len(leaders)} brave souls with {top_votes} votes each!")
+                st.write("🎲 *If voting ended now, we'd need a coin flip!*")
+                chosen_one = random.choice(leaders)  # Pick one for the announcement preview
 
-    # Final announcement section (only after voting closes)
-    if not voting_open and st.session_state.nominations:
-        leaders, top_votes = get_current_leader()
-        final_winner = leaders[0] if len(leaders) == 1 else random.choice(leaders)
+        # Victory speeches (always show current leader's)
+        victory_speeches = [
+            f"🎤 {chosen_one}: 'I'd like to thank my agent, my coffee maker, and whoever nominated me...'",
+            f"🎤 {chosen_one}: 'This is either the greatest honor or the worst luck of my life!'",
+            f"🎤 {chosen_one}: 'I promise to sneak responsibly and secure that campsite!'",
+            f"🎤 {chosen_one}: 'Greg, I hope you have a good alarm clock!'",
+            f"🎤 {chosen_one}: 'Well, someone had to do it. Might as well be me!'"
+        ]
+        st.write(random.choice(victory_speeches))
+
+        st.markdown("🎪" * 20)
+        st.markdown("### 📣 OFFICIAL ANNOUNCEMENT:")
+        if voting_open:
+            st.info(f"🏕️ **{chosen_one} and Greg** are currently set to be the Early Bird Infiltration Team!")
+            st.warning("⚠️ *Subject to change until voting closes on August 12th, 2025*")
+        else:
+            st.success(f"🏕️ **{chosen_one} and Greg** will be the official Early Bird Infiltration Team!")
         
-        st.markdown("---")
-        st.header("🎪 OFFICIAL ANNOUNCEMENT 🎪")
+        st.info("⏰ **Mission time:** Approximately 4:30 AM (or whenever Greg's alarm goes off)")
+        st.info("🎯 **Mission objective:** Secure the sacred campsite spot")
+        st.info("🤝 **Mission support:** Everyone else sleeps in and arrives fashionably late")
+        st.markdown("🎪" * 20)
 
-        announcement_col = st.columns([1, 2, 1])[1]
-        with announcement_col:
-            st.success(f"🏕️ **{final_winner} and Greg** will be the official Early Bird Infiltration Team!")
-            st.info("⏰ **Mission time:** Approximately 4:30 AM (or whenever Greg's alarm goes off)")
-            st.info("🎯 **Mission objective:** Secure the sacred campsite spot")
-            st.info("🤝 **Mission support:** Everyone else sleeps in and arrives fashionably late")
+        # Folk festival wisdom (only show after voting closes)
+        if not voting_open:
+            with st.expander("📜 FINAL FESTIVAL WISDOM", expanded=True):
+                folk_wisdom = [
+                    "🎵 Remember: 'The times they are a-changin'... but the campsite tradition stays the same!' 🎵",
+                    "🎸 'Blowin' in the wind' is just the morning breeze at 4:30 AM! 🎸",
+                    "🪕 'This land is your land'... but this campsite is OURS! 🪕",
+                    "🎺 'We shall overcome'... the security guards and claim our spot! 🎺"
+                ]
 
-        # Folk festival wisdom
-        with st.expander("📜 FINAL FESTIVAL WISDOM", expanded=True):
-            folk_wisdom = [
-                "🎵 Remember: 'The times they are a-changin'... but the campsite tradition stays the same!' 🎵",
-                "🎸 'Blowin' in the wind' is just the morning breeze at 4:30 AM! 🎸",
-                "🪕 'This land is your land'... but this campsite is OURS! 🪕",
-                "🎺 'We shall overcome'... the security guards and claim our spot! 🎺"
-            ]
+                st.markdown(random.choice(folk_wisdom))
+                st.markdown("""
+                **Final reminders:**
+                - 🌅 Early bird gets the worm... and the best camping spot!
+                - ☕ Coffee is not optional at 4:30 AM
+                - 🤝 Teamwork makes the dream work (even if you're dreaming of sleeping in)
+                - 🎪 What happens at early infiltration stays at early infiltration
+                - 📱 Remember to text the group when you've secured the perimeter!
 
-            st.markdown(random.choice(folk_wisdom))
-            st.markdown("""
-            **Final reminders:**
-            - 🌅 Early bird gets the worm... and the best camping spot!
-            - ☕ Coffee is not optional at 4:30 AM
-            - 🤝 Teamwork makes the dream work (even if you're dreaming of sleeping in)
-            - 🎪 What happens at early infiltration stays at early infiltration
-            - 📱 Remember to text the group when you've secured the perimeter!
+                🎊 **May your stakes be sturdy and your tarps be taut!** 🎊  
+                🏕️ **See you all at the sacred campsite... whenever you decide to roll out of bed!** 🏕️
+                """)
 
-            🎊 **May your stakes be sturdy and your tarps be taut!** 🎊  
-            🏕️ **See you all at the sacred campsite... whenever you decide to roll out of bed!** 🏕️
-            """)
-
-    # Reset button (admin)
-    if st.session_state.nominations:
-        with st.expander("⚙️ Admin Controls"):
-            # Add password protection for reset
-            reset_code = st.text_input("🔐 Enter admin code to reset:", 
-                                     type="password", 
-                                     placeholder="Enter 4-digit code")
-            
-            if st.button("🔄 Reset All Nominations", type="secondary"):
-                if reset_code == "1320":
-                    st.session_state.nominations = defaultdict(int)
-                    st.session_state.nominators = []
-                    st.session_state.write_in_candidates = set()
-                    st.session_state.nomination_reasons = {}
-                    # Save the reset state
-                    save_data()
-                    st.success("🎪 All nominations have been reset!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid admin code! Nice try though... 🎭")
+    # Hidden admin controls (less obvious)
+    if st.session_state.nominations and st.checkbox("🎭 Show advanced options"):
+        admin_code = st.text_input("Enter code:", type="password", placeholder="4-digit code")
+        
+        if st.button("Reset data", type="secondary") and admin_code == "1320":
+            st.session_state.nominations = defaultdict(int)
+            st.session_state.nominators = []
+            st.session_state.write_in_candidates = set()
+            st.session_state.nomination_reasons = {}
+            save_data()
+            st.success("Data reset successfully.")
+            time.sleep(1)
+            st.rerun()
+        elif st.button("Reset data", type="secondary"):
+            st.error("Invalid code.")
 
 if __name__ == "__main__":
     main()
