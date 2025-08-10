@@ -37,11 +37,10 @@ nominee_profiles = {
 }
 
 folk_quotes = [
-    "🎵 'The answer, my friend, is blowin' in the wind...' 🎵",
-    "🎸 'I hear the train a-comin', it's rollin' 'round the bend...' 🎸",
-    "🪕 'If I had a hammer, I'd use it to set up tents at dawn...' 🪕",
-    "🎭 'Turn, turn, turn... to face the music of early morning duty!' 🎭",
-    "🎺 'This land is your land, this campsite is our land...' 🎺"
+    "🎭 'She neva came!...' 🎭",
+    "🪕 'I DID IT!' 🪕",
+    "🎭 'I changed my shirt!' 🎭",
+
 ]
 
 def main():
