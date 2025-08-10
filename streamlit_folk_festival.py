@@ -15,26 +15,35 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Google Sheets integration (replace with your sheet URL)
-SHEET_URL = st.secrets.get("sheet_url", "")  # Add this to your Streamlit secrets
+# JSONBin.io integration for persistent storage
+# Get these from your Streamlit secrets or set as environment variables
+JSONBIN_API_KEY = st.secrets.get("jsonbin_api_key", "")
+JSONBIN_BIN_ID = st.secrets.get("jsonbin_bin_id", "")
 
 def load_data():
-    """Load data from Google Sheets or fallback to session state"""
+    """Load data from JSONBin.io with fallback to session state"""
     try:
-        if SHEET_URL:
-            # Try to load from Google Sheets
-            response = requests.get(SHEET_URL, timeout=5)
+        if JSONBIN_API_KEY and JSONBIN_BIN_ID:
+            # Load from JSONBin.io
+            headers = {
+                "X-Master-Key": JSONBIN_API_KEY,
+                "Content-Type": "application/json"
+            }
+            url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}/latest"
+            response = requests.get(url, headers=headers, timeout=10)
+            
             if response.status_code == 200:
-                data = response.json()
-                nominations = defaultdict(int, data.get('nominations', {}))
+                data = response.json().get("record", {})
                 return {
-                    'nominations': nominations,
+                    'nominations': defaultdict(int, data.get('nominations', {})),
                     'nominators': data.get('nominators', []),
                     'write_in_candidates': set(data.get('write_in_candidates', [])),
                     'nomination_reasons': data.get('nomination_reasons', {})
                 }
-    except:
-        pass
+            else:
+                st.warning(f"⚠️ Could not load data from storage (Status: {response.status_code})")
+    except Exception as e:
+        st.warning(f"⚠️ Storage connection issue: {str(e)}")
     
     # Fallback to session state if available
     if hasattr(st.session_state, 'nominations'):
@@ -54,9 +63,9 @@ def load_data():
     }
 
 def save_data():
-    """Save data to Google Sheets (if configured) and session state"""
+    """Save data to JSONBin.io and session state"""
     try:
-        # Always save to session state as backup
+        # Prepare data for storage
         data = {
             'nominations': dict(st.session_state.nominations),
             'nominators': st.session_state.nominators,
@@ -64,12 +73,27 @@ def save_data():
             'nomination_reasons': getattr(st.session_state, 'nomination_reasons', {})
         }
         
-        if SHEET_URL:
-            # Save to Google Sheets
-            requests.post(SHEET_URL.replace('/edit', '/exec'), 
-                         data={'data': json.dumps(data)}, timeout=5)
+        if JSONBIN_API_KEY and JSONBIN_BIN_ID:
+            # Save to JSONBin.io
+            headers = {
+                "X-Master-Key": JSONBIN_API_KEY,
+                "Content-Type": "application/json"
+            }
+            url = f"https://api.jsonbin.io/v3/b/{JSONBIN_BIN_ID}"
+            response = requests.put(url, headers=headers, json=data, timeout=10)
+            
+            if response.status_code == 200:
+                return True  # Success
+            else:
+                st.error(f"❌ Failed to save data (Status: {response.status_code})")
+                return False
+        else:
+            st.warning("⚠️ No storage configured - data only saved locally")
+            return True
+            
     except Exception as e:
-        st.error(f"Warning: Data save issue: {e}")
+        st.error(f"❌ Data save error: {str(e)}")
+        return False
 
 def get_current_leader():
     """Get the current leader(s) in nominations"""
@@ -201,29 +225,28 @@ def main():
                             st.session_state.write_in_candidates.add(write_in_name)
 
                         # Save to persistent storage
-                        save_data()
+                        if save_data():
+                            # Show reaction
+                            if nominee_choice == nominator:
+                                st.success(f"🦸 {nominator} bravely nominates themselves!")
+                                st.balloons()
+                            else:
+                                reactions = [
+                                    f"😱 {nominee_choice}: 'Wait, what?!'",
+                                    f"😏 {nominee_choice}: 'I should have seen this coming...'",
+                                    f"🤷 {nominee_choice}: 'Well, someone has to do it!'",
+                                    f"😤 {nominee_choice}: 'I'm getting you back for this!'",
+                                    f"😌 {nominee_choice}: 'Finally, recognition for my sneaking skills!'"
+                                ]
+                                st.success(f"🎯 {nominator} nominates {nominee_choice}!")
+                                st.info(random.choice(reactions))
 
-                        # Show reaction
-                        if nominee_choice == nominator:
-                            st.success(f"🦸 {nominator} bravely nominates themselves!")
-                            st.balloons()
-                        else:
-                            reactions = [
-                                f"😱 {nominee_choice}: 'Wait, what?!'",
-                                f"😏 {nominee_choice}: 'I should have seen this coming...'",
-                                f"🤷 {nominee_choice}: 'Well, someone has to do it!'",
-                                f"😤 {nominee_choice}: 'I'm getting you back for this!'",
-                                f"😌 {nominee_choice}: 'Finally, recognition for my sneaking skills!'"
-                            ]
-                            st.success(f"🎯 {nominator} nominates {nominee_choice}!")
-                            st.info(random.choice(reactions))
+                            if reason:
+                                st.write(f"💭 *'{reason}'*")
 
-                        if reason:
-                            st.write(f"💭 *'{reason}'*")
-
-                        # Refresh the page to update results
-                        time.sleep(1)  # Brief pause to ensure save completes
-                        st.rerun()
+                            # Refresh the page to update results
+                            time.sleep(1)  # Brief pause to ensure save completes
+                            st.rerun()
                     else:
                         st.error("🎵 You've already cast your nomination! One vote per person.")
         else:
@@ -408,107 +431,4 @@ def main():
             st.error("Invalid code.")
 
 if __name__ == "__main__":
-    main()
-    # --- Google Sheets Persistence Layer for Streamlit Community Cloud ---
-
-    # 1. Setup Instructions:
-    #    a. Create a Google Sheet with columns: "nominations", "nominators", "nomination_reasons", "write_in_candidates"
-    #    b. Share the sheet with a Google Service Account (see below)
-    #    c. Add your service account credentials JSON to Streamlit Secrets as:
-    #       [gcp_service_account]
-    #       type = ...
-    #       project_id = ...
-    #       private_key_id = ...
-    #       private_key = ...
-    #       client_email = ...
-    #       client_id = ...
-    #       ...
-    #    d. Add your sheet URL to Streamlit Secrets as:
-    #       [gsheets]
-    #       sheet_url = "https://docs.google.com/spreadsheets/d/...."
-
-    import streamlit as st
-    import json
-    from collections import defaultdict
-
-    # Use Streamlit's built-in Google Sheets connection (no extra pip install needed on Streamlit Cloud)
-    from streamlit.connections import ExperimentalBaseConnection
-
-    class GSheetsConnection(ExperimentalBaseConnection):
-        def _connect(self, **kwargs):
-            import gspread
-            from google.oauth2.service_account import Credentials
-            creds_dict = dict(st.secrets["gcp_service_account"])
-            creds_dict["private_key"] = creds_dict["private_key"].replace('\\n', '\n')
-            creds = Credentials.from_service_account_info(creds_dict, scopes=[
-                "https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/drive"
-            ])
-            client = gspread.authorize(creds)
-            return client
-
-        def cursor(self):
-            return self._instance
-
-    # Helper to get the worksheet
-    def get_worksheet():
-        sheet_url = st.secrets["gsheets"]["sheet_url"]
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        client = conn.cursor()
-        sheet = client.open_by_url(sheet_url)
-        worksheet = sheet.sheet1  # Use first sheet
-        return worksheet
-
-    def load_data():
-        """
-        Loads nominations, nominators, nomination_reasons, and write_in_candidates from Google Sheets.
-        """
-        worksheet = get_worksheet()
-        records = worksheet.get_all_records()
-        if not records:
-            # No data yet, initialize
-            st.session_state.nominations = defaultdict(int)
-            st.session_state.nominators = []
-            st.session_state.nomination_reasons = {}
-            st.session_state.write_in_candidates = set()
-            return
-
-        # Use the first (and only) row as the data store
-        row = records[0]
-        # Each field is stored as a JSON string
-        st.session_state.nominations = defaultdict(
-            int, json.loads(row.get("nominations", "{}"))
-        )
-        st.session_state.nominators = json.loads(row.get("nominators", "[]"))
-        st.session_state.nomination_reasons = json.loads(row.get("nomination_reasons", "{}"))
-        st.session_state.write_in_candidates = set(json.loads(row.get("write_in_candidates", "[]")))
-
-    def save_data():
-        """
-        Saves nominations, nominators, nomination_reasons, and write_in_candidates to Google Sheets.
-        """
-        worksheet = get_worksheet()
-        # Prepare data as JSON strings
-        data = {
-            "nominations": json.dumps(dict(st.session_state.nominations)),
-            "nominators": json.dumps(list(st.session_state.nominators)),
-            "nomination_reasons": json.dumps(dict(st.session_state.nomination_reasons)),
-            "write_in_candidates": json.dumps(list(st.session_state.write_in_candidates)),
-        }
-        records = worksheet.get_all_records()
-        if not records:
-            # Insert new row
-            worksheet.append_row([data["nominations"], data["nominators"], data["nomination_reasons"], data["write_in_candidates"]])
-            # Set header if not present
-            if worksheet.row_count < 2:
-                worksheet.insert_row(["nominations", "nominators", "nomination_reasons", "write_in_candidates"], 1)
-        else:
-            # Update first row (row 2, since row 1 is header)
-            worksheet.update("A2", [[data["nominations"], data["nominators"], data["nomination_reasons"], data["write_in_candidates"]]])
-
-    # --- Why this works ---
-    # - Google Sheets is a free, persistent, cloud-hosted database for small data.
-    # - All users/devices see the same data instantly (on reload).
-    # - Data survives Streamlit container restarts and is shared across all browsers.
-    # - No local file storage is used; all data is in the cloud.
-    # - No complex DB setup; just a Google Sheet and a service account.
+    main() 
