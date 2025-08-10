@@ -30,7 +30,8 @@ def load_data():
                     'nominators': data.get('nominators', []),
                     'write_in_candidates': set(data.get('write_in_candidates', [])),
                     'winner_selected': data.get('winner_selected', False),
-                    'winner': data.get('winner', None)
+                    'winner': data.get('winner', None),
+                    'nomination_reasons': data.get('nomination_reasons', {})
                 }
         except:
             pass
@@ -41,7 +42,8 @@ def load_data():
         'nominators': [],
         'write_in_candidates': set(),
         'winner_selected': False,
-        'winner': None
+        'winner': None,
+        'nomination_reasons': {}
     }
 
 def save_data():
@@ -52,7 +54,8 @@ def save_data():
             'nominators': st.session_state.nominators,
             'write_in_candidates': list(st.session_state.write_in_candidates),
             'winner_selected': st.session_state.winner_selected,
-            'winner': st.session_state.winner
+            'winner': st.session_state.winner,
+            'nomination_reasons': getattr(st.session_state, 'nomination_reasons', {})
         }
         with open(DATA_FILE, 'w') as f:
             json.dump(data, f, indent=2)
@@ -68,7 +71,17 @@ if 'data_loaded' not in st.session_state:
     st.session_state.write_in_candidates = saved_data['write_in_candidates']
     st.session_state.winner_selected = saved_data['winner_selected']
     st.session_state.winner = saved_data['winner']
+    st.session_state.nomination_reasons = saved_data['nomination_reasons']
     st.session_state.data_loaded = True
+else:
+    # Always reload data to get latest votes from other users
+    saved_data = load_data()
+    st.session_state.nominations = saved_data['nominations']
+    st.session_state.nominators = saved_data['nominators']
+    st.session_state.write_in_candidates = saved_data['write_in_candidates']
+    st.session_state.winner_selected = saved_data['winner_selected']
+    st.session_state.winner = saved_data['winner']
+    st.session_state.nomination_reasons = saved_data['nomination_reasons']
 
 # Eligible nominees and profiles
 eligible_nominees = ["Bowe", "Drew", "Derek", "Emily", "Josh", "TallPaul", "Osc"]
@@ -150,6 +163,14 @@ def main():
                     st.session_state.nominators.append(nominator)
                     st.session_state.nominations[nominee_choice] += 1
 
+                    # Store the reason (without the nominator's name)
+                    if reason and reason.strip():
+                        if 'nomination_reasons' not in st.session_state:
+                            st.session_state.nomination_reasons = {}
+                        if nominee_choice not in st.session_state.nomination_reasons:
+                            st.session_state.nomination_reasons[nominee_choice] = []
+                        st.session_state.nomination_reasons[nominee_choice].append(reason.strip())
+
                     if write_in_name:
                         st.session_state.write_in_candidates.add(write_in_name)
 
@@ -224,6 +245,11 @@ def main():
 
                 if nominee in st.session_state.write_in_candidates:
                     st.write("   📝 *(Write-in candidate - thinking outside the tent!)*")
+
+                # Show nomination reasons (without names)
+                if nominee in st.session_state.get('nomination_reasons', {}):
+                    for reason in st.session_state.nomination_reasons[nominee]:
+                        st.write(f"   💭 *\"{reason}\"*")
 
                 st.write("")
 
@@ -336,6 +362,7 @@ def main():
                 st.session_state.write_in_candidates = set()
                 st.session_state.winner_selected = False
                 st.session_state.winner = None
+                st.session_state.nomination_reasons = {}
                 # Save the reset state
                 save_data()
                 st.rerun()
