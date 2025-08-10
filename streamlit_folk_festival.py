@@ -54,7 +54,7 @@ def main():
         st.markdown("""
         **Welcome to the annual tradition nobody wants but somebody must do!**
 
-        Every year, two brave souls must sneak into the festival early with Greg
+        Every year, two brave souls must sneak into the festival early (normally it comes down to - who's going with Greg!?)
         to secure the sacred campsite that has been our home away from home.
 
         🎪 **The Mission:** Arrive before dawn, act casual, claim the spot  
