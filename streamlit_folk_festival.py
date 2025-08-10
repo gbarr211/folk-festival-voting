@@ -3,8 +3,9 @@ import random
 import time
 from collections import defaultdict
 import json
-import os
 from datetime import datetime
+import requests
+import urllib.parse
 
 # Page configuration
 st.set_page_config(
@@ -14,15 +15,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Persistent storage functions
-DATA_FILE = "folk_festival_data.json"
+# Google Sheets integration (replace with your sheet URL)
+SHEET_URL = st.secrets.get("sheet_url", "")  # Add this to your Streamlit secrets
 
 def load_data():
-    """Load data from persistent storage"""
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r') as f:
-                data = json.load(f)
+    """Load data from Google Sheets or fallback to session state"""
+    try:
+        if SHEET_URL:
+            # Try to load from Google Sheets
+            response = requests.get(SHEET_URL, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
                 nominations = defaultdict(int, data.get('nominations', {}))
                 return {
                     'nominations': nominations,
@@ -30,9 +33,19 @@ def load_data():
                     'write_in_candidates': set(data.get('write_in_candidates', [])),
                     'nomination_reasons': data.get('nomination_reasons', {})
                 }
-        except:
-            pass
+    except:
+        pass
     
+    # Fallback to session state if available
+    if hasattr(st.session_state, 'nominations'):
+        return {
+            'nominations': st.session_state.nominations,
+            'nominators': st.session_state.nominators,
+            'write_in_candidates': st.session_state.write_in_candidates,
+            'nomination_reasons': st.session_state.nomination_reasons
+        }
+    
+    # Default empty state
     return {
         'nominations': defaultdict(int),
         'nominators': [],
@@ -41,18 +54,22 @@ def load_data():
     }
 
 def save_data():
-    """Save current data to persistent storage"""
+    """Save data to Google Sheets (if configured) and session state"""
     try:
+        # Always save to session state as backup
         data = {
             'nominations': dict(st.session_state.nominations),
             'nominators': st.session_state.nominators,
             'write_in_candidates': list(st.session_state.write_in_candidates),
             'nomination_reasons': getattr(st.session_state, 'nomination_reasons', {})
         }
-        with open(DATA_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
+        
+        if SHEET_URL:
+            # Save to Google Sheets
+            requests.post(SHEET_URL.replace('/edit', '/exec'), 
+                         data={'data': json.dumps(data)}, timeout=5)
     except Exception as e:
-        st.error(f"Error saving data: {e}")
+        st.error(f"Warning: Data save issue: {e}")
 
 def get_current_leader():
     """Get the current leader(s) in nominations"""
@@ -66,20 +83,11 @@ def get_current_leader():
     return leaders, top_votes
 
 # Initialize session state with persistent data
-if 'data_loaded' not in st.session_state:
-    saved_data = load_data()
-    st.session_state.nominations = saved_data['nominations']
-    st.session_state.nominators = saved_data['nominators']
-    st.session_state.write_in_candidates = saved_data['write_in_candidates']
-    st.session_state.nomination_reasons = saved_data['nomination_reasons']
-    st.session_state.data_loaded = True
-else:
-    # Always reload data to get latest votes from other users
-    saved_data = load_data()
-    st.session_state.nominations = saved_data['nominations']
-    st.session_state.nominators = saved_data['nominators']
-    st.session_state.write_in_candidates = saved_data['write_in_candidates']
-    st.session_state.nomination_reasons = saved_data['nomination_reasons']
+saved_data = load_data()
+st.session_state.nominations = saved_data['nominations']
+st.session_state.nominators = saved_data['nominators']
+st.session_state.write_in_candidates = saved_data['write_in_candidates']
+st.session_state.nomination_reasons = saved_data['nomination_reasons']
 
 # Eligible nominees and profiles
 eligible_nominees = ["Bowe", "Drew", "Derek", "Emily", "Josh", "TallPaul", "Osc"]
@@ -129,6 +137,15 @@ def main():
         {"🗳️ **Status:** VOTING OPEN" if voting_open else "🔒 **Status:** VOTING CLOSED"}
         {f"({days_until_deadline} days remaining)" if voting_open and days_until_deadline > 0 else ""}
         """)
+
+    # Auto-refresh every 10 seconds to get latest votes
+    if st.button("🔄 Refresh Results", help="Click to see latest votes from all devices"):
+        st.rerun()
+
+    # Add auto-refresh timer
+    placeholder = st.empty()
+    with placeholder.container():
+        st.info("📱 App auto-refreshes to sync votes across all devices")
 
     # Sidebar for nominations
     with st.sidebar:
@@ -205,6 +222,7 @@ def main():
                             st.write(f"💭 *'{reason}'*")
 
                         # Refresh the page to update results
+                        time.sleep(1)  # Brief pause to ensure save completes
                         st.rerun()
                     else:
                         st.error("🎵 You've already cast your nomination! One vote per person.")
@@ -360,20 +378,33 @@ def main():
                 🏕️ **See you all at the sacred campsite... whenever you decide to roll out of bed!** 🏕️
                 """)
 
-    # Hidden admin controls (less obvious)
+    # Enhanced admin controls with nominator list
     if st.session_state.nominations and st.checkbox("🎭 Show advanced options"):
         admin_code = st.text_input("Enter code:", type="password", placeholder="4-digit code")
         
-        if st.button("Reset data", type="secondary") and admin_code == "1320":
-            st.session_state.nominations = defaultdict(int)
-            st.session_state.nominators = []
-            st.session_state.write_in_candidates = set()
-            st.session_state.nomination_reasons = {}
-            save_data()
-            st.success("Data reset successfully.")
-            time.sleep(1)
-            st.rerun()
-        elif st.button("Reset data", type="secondary"):
+        # Show nominators list when correct code is entered
+        if admin_code == "1320":
+            st.success("🔓 Admin access granted")
+            
+            # Display nominator list
+            st.subheader("👥 Complete Nominator List:")
+            if st.session_state.nominators:
+                for i, nominator in enumerate(st.session_state.nominators, 1):
+                    st.write(f"{i}. {nominator}")
+            else:
+                st.write("No nominators yet")
+            
+            # Reset button
+            if st.button("Reset data", type="secondary"):
+                st.session_state.nominations = defaultdict(int)
+                st.session_state.nominators = []
+                st.session_state.write_in_candidates = set()
+                st.session_state.nomination_reasons = {}
+                save_data()
+                st.success("Data reset successfully.")
+                time.sleep(1)
+                st.rerun()
+        elif admin_code and admin_code != "1320":
             st.error("Invalid code.")
 
 if __name__ == "__main__":
