@@ -353,19 +353,30 @@ def main():
             🏕️ **See you all at the sacred campsite... whenever you decide to roll out of bed!** 🏕️
             """)
 
-    # Reset button (admin)
-    if st.session_state.nominations:
-        with st.expander("⚙️ Admin Controls"):
-            if st.button("🔄 Reset All Nominations", type="secondary"):
-                st.session_state.nominations = defaultdict(int)
-                st.session_state.nominators = []
-                st.session_state.write_in_candidates = set()
-                st.session_state.winner_selected = False
-                st.session_state.winner = None
-                st.session_state.nomination_reasons = {}
-                # Save the reset state
-                save_data()
-                st.rerun()
+        # Reset button (admin)
+        if st.session_state.nominations:
+            with st.expander("⚙️ Admin Controls"):
+                # Add password protection for reset
+                reset_code = st.text_input("🔐 Enter admin code to reset:", 
+                                         type="password", 
+                                         placeholder="Enter 4-digit code")
+                
+                if st.button("🔄 Reset All Nominations", type="secondary"):
+                    if reset_code == "1320":
+                        st.session_state.nominations = defaultdict(int)
+                        st.session_state.nominators = []
+                        st.session_state.write_in_candidates = set()
+                        st.session_state.winner_selected = False
+                        st.session_state.winner = None
+                        st.session_state.nomination_reasons = {}
+                        # Save the reset state
+                        save_data()
+                        st.success("🎪 All nominations have been reset!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid admin code! Nice try though... 🎭")
+
 
 if __name__ == "__main__":
     main()
